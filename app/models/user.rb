@@ -1,6 +1,11 @@
 class User < ActiveRecord::Base
 	@@connections=nil
 	@@access_token =Authorize.get_access_token;
+def self.hash_with_default_hash
+    Hash.new { |hash, key| hash[key] = hash_with_default_hash }
+end
+
+
 def self.get_values
 	access_token= @@access_token;
 	#Make the api call to get all connections
@@ -48,26 +53,38 @@ def self.ordercontacts
 		#Assign a score based on location
 		co['score']+=1 if co['location']['name'].eql? cUser['location']['name']
 	end
-	
+	temphash=User.hash_with_default_hash
+	index=0
 	contacts.keys.each do |cohash|
 		#Get list of mutual contacts for each connection
 		self_conn = @@access_token.get('https://api.linkedin.com/v1/people/'+cohash+':(relation-to-viewer:(related-connections))?format=json')
     	self_conn_body = JSON.parse self_conn.body
     	self_conn_body= self_conn_body["relationToViewer"]["relatedConnections"]["values"]
     	if !self_conn_body.nil? then #Exclude people with no other mutual contacts
-    	
     	self_conn_body.map{|subhash| 
     		#Get the contact id
     		mutcont = contacts[subhash['id']] 
+    		#puts mutcont
     		#Add the score of the contact to current score
-    		contacts[cohash]['score']+=1 * mutcont['score'] if !mutcont.nil?
+    		if !mutcont.nil? then #Store in a temporary hash, the updated score
+    				temphash[cohash]['score']=contacts[cohash]['score'] + 0.1 * mutcont['score'] 
+    		
+    		end
     	}
     	end
-    	
-	end
+    	end
+    
+
+    	contacts.keys.each do |key|
+    	contacts[key]['score'] = temphash[key]['score'] if temphash[key]['score'].is_a? Float
+    	#Update the original score with the new one
+		end
+
+		
 	#Sort first by score and then by firstName
-	contacts = contacts.values.sort_by do |con| [con['score'], con['firstName']] end;
+	contacts = contacts.values.sort_by do |con| [con['score'], con['firstName']] end
 	#Return sorted descended
 	return contacts.reverse
-end
+	end
+
 end

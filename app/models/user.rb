@@ -3,39 +3,38 @@ class User < ActiveRecord::Base
 	@@access_token =Authorize.get_access_token;
 def self.get_values
 	access_token= @@access_token;
-
+	#Make the api call to get all connections
   	response = access_token.get('https://api.linkedin.com/v1/people/~/connections?format=json')
-  	 #Hash
-    
-   
-    #self_conn = access_token.get('https://api.linkedin.com/v1/people/<ID>:(relation-to-viewer:(related-connections))?format=json')
-    #self_conn_body = JSON.parse self_conn.body
-    #puts self_conn_body
+
      case response
               when Net::HTTPUnauthorized
                 # Handle 401 Unauthorized response
               when Net::HTTPForbidden
                 # Handle 403 Forbidden response
     end
-    
+    #Store response body
   	@@connections = JSON.parse response.body
-  	#puts @@connections[]
+  	#Return list of user connections
   	return @@connections.values[3]
 end
 
 def self.currentUser
 	access_token= @@access_token;
+	#Get the location, industry and headline of current user
 	self_response = access_token.get('https://api.linkedin.com/v1/people/~:(location,industry,headline)?format=json')
     self_body = JSON.parse self_response.body
 
 end
 def self.ordercontacts
+	#Get list of user contacts
 	contacts=User.get_values
+	#Convert the list of user contacts to a hash
 	contacts=Hash[contacts.map { |r| [r['id'], r] }]
-	
+	#The current user
 	cUser= User.currentUser
+	#Get information of the organization at which current user works
 	cUser['headline']=cUser['headline'].split(' at ')
-	#puts cUser['industry'].split;
+	#Get information of the organization that user contacts work
 	contacts.values.each do |co| 
 		co['headline']= co['headline'].split(' at ')
 		co['score']=0
@@ -51,25 +50,24 @@ def self.ordercontacts
 	end
 	
 	contacts.keys.each do |cohash|
-		#puts 'before' + contacts[cohash]['score'].to_s
+		#Get list of mutual contacts for each connection
 		self_conn = @@access_token.get('https://api.linkedin.com/v1/people/'+cohash+':(relation-to-viewer:(related-connections))?format=json')
     	self_conn_body = JSON.parse self_conn.body
     	self_conn_body= self_conn_body["relationToViewer"]["relatedConnections"]["values"]
-    	if !self_conn_body.nil? then
-    		#puts self_conn_body
-
-    	#self_conn_body=self_conn_body["relationToViewer"]["relatedConnections"]#["values"]
-    	#puts self_conn_body
+    	if !self_conn_body.nil? then #Exclude people with no other mutual contacts
+    	
     	self_conn_body.map{|subhash| 
-    		#puts contacts[cohash]['score']
+    		#Get the contact id
     		mutcont = contacts[subhash['id']] 
-    		contacts[cohash]['score']+=mutcont['score'] if !mutcont.nil?
+    		#Add the score of the contact to current score
+    		contacts[cohash]['score']+=1 * mutcont['score'] if !mutcont.nil?
     	}
     	end
-    	#puts contacts[cohash]['score']
+    	
 	end
+	#Sort first by score and then by firstName
 	contacts = contacts.values.sort_by do |con| [con['score'], con['firstName']] end;
-
+	#Return sorted descended
 	return contacts.reverse
 end
 end
